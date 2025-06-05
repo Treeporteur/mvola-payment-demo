@@ -1,49 +1,3 @@
-const express = require('express');
-const axios = require('axios');
-const router = express.Router();
-
-// Fonction pour obtenir le token d'authentification MVola
-async function getMVolaToken() {
-    try {
-        const credentials = Buffer.from(
-            `${process.env.MVOLA_CONSUMER_KEY}:${process.env.MVOLA_CONSUMER_SECRET}`
-        ).toString('base64');
-
-        const response = await axios.post(process.env.MVOLA_AUTH_URL, 
-            'grant_type=client_credentials&scope=EXT_INT_MVOLA_SCOPE',
-            {
-                headers: {
-                    'Authorization': `Basic ${credentials}`,
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Cache-Control': 'no-cache'
-                }
-            }
-        );
-
-        return response.data.access_token;
-    } catch (error) {
-        console.error('Erreur authentification MVola:', error.response?.data || error.message);
-        throw new Error('Impossible d\'obtenir le token MVola');
-    }
-}
-
-// Route pour obtenir un token (test)
-router.get('/token', async (req, res) => {
-    try {
-        const token = await getMVolaToken();
-        res.json({ 
-            success: true, 
-            message: 'Token obtenu avec succès',
-            token: token.substring(0, 20) + '...'
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
-    }
-});
-
 // Route pour initier un paiement
 router.post('/initiate', async (req, res) => {
     try {
@@ -58,14 +12,17 @@ router.post('/initiate', async (req, res) => {
 
         const accessToken = await getMVolaToken();
 
-        // Format EXACT de l'exemple CURL de la documentation
+        // Générer IDs uniques et date au bon format
+        const correlationId = `CORR_${Date.now()}`;
+        const transactionRef = `DEMO_${Date.now()}`;
+        const requestDate = new Date().toISOString();
+
+        // Format EXACT selon les tests qui marchent
         const transactionData = {
             "amount": amount.toString(),
             "currency": "Ar",
             "descriptionText": description || "Paiement Demo MVola",
-            "requestingOrganisationTransactionReference": "",
-            "requestDate": "",
-            "originalTransactionReference": "",
+            "requestDate": requestDate,
             "debitParty": [
                 {
                     "key": "msisdn",
@@ -91,27 +48,34 @@ router.post('/initiate', async (req, res) => {
                     "key": "amountFc",
                     "value": "1"
                 }
-            ]
+            ],
+            "requestingOrganisationTransactionReference": transactionRef,
+            "originalTransactionReference": ""
         };
 
-        console.log('Données envoyées à MVola:', JSON.stringify(transactionData, null, 2));
+        console.log('=== REQUÊTE MVOLA ===');
+        console.log('URL:', process.env.MVOLA_PAYMENT_URL);
+        console.log('Correlation ID:', correlationId);
+        console.log('Transaction Ref:', transactionRef);
+        console.log('Data:', JSON.stringify(transactionData, null, 2));
 
-        // Headers exacts de la documentation + X-Callback-URL
+        // Headers dans l'ordre exact de la documentation + casse correcte
         const response = await axios.post(process.env.MVOLA_PAYMENT_URL, transactionData, {
             headers: {
+                'Authorization': `Bearer ${accessToken}`,
                 'Version': '1.0',
-                'X-CorrelationID': `CORR_${Date.now()}`,
+                'X-CorrelationID': correlationId,
                 'UserLanguage': 'FR',
                 'UserAccountIdentifier': `msisdn;${process.env.PARTNER_MSISDN}`,
                 'partnerName': process.env.PARTNER_NAME,
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-                'X-Callback-URL': 'https://mvola-payment-demo.onrender.com/api/payment/callback',
                 'Cache-Control': 'no-cache'
             }
         });
 
-        console.log('Réponse MVola:', response.data);
+        console.log('=== RÉPONSE MVOLA SUCCESS ===');
+        console.log('Status:', response.status);
+        console.log('Data:', response.data);
 
         res.json({
             success: true,
@@ -120,54 +84,20 @@ router.post('/initiate', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Erreur initiation paiement:', error.response?.data || error.message);
-        res.status(500).json({
+        console.error('=== ERREUR MVOLA DÉTAILLÉE ===');
+        console.error('URL:', process.env.MVOLA_PAYMENT_URL);
+        console.error('Status Code:', error.response?.status);
+        console.error('Status Text:', error.response?.statusText);
+        console.error('Headers Response:', error.response?.headers);
+        console.error('Réponse complète:', JSON.stringify(error.response?.data, null, 2));
+        console.error('Message:', error.message);
+        console.error('Config:', error.config);
+        
+        res.status(error.response?.status || 500).json({
             success: false,
             error: 'Erreur lors de l\'initiation du paiement',
-            details: error.response?.data || error.message
+            details: error.response?.data || error.message,
+            httpStatus: error.response?.status
         });
     }
 });
-
-// Route pour vérifier le statut d'une transaction
-router.get('/status/:serverCorrelationId', async (req, res) => {
-    try {
-        const { serverCorrelationId } = req.params;
-        const accessToken = await getMVolaToken();
-
-        const response = await axios.get(
-            `${process.env.MVOLA_PAYMENT_URL}/status/${serverCorrelationId}`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Version': '1.0',
-                    'X-CorrelationID': `STATUS_${Date.now()}`,
-                    'UserLanguage': 'FR',
-                    'UserAccountIdentifier': `msisdn;${process.env.PARTNER_MSISDN}`,
-                    'partnerName': process.env.PARTNER_NAME,
-                    'Cache-Control': 'no-cache'
-                }
-            }
-        );
-
-        res.json({
-            success: true,
-            data: response.data
-        });
-
-    } catch (error) {
-        console.error('Erreur vérification statut:', error.response?.data || error.message);
-        res.status(500).json({
-            success: false,
-            error: 'Erreur lors de la vérification du statut'
-        });
-    }
-});
-
-// Route callback pour MVola (optionnelle)
-router.put('/callback', (req, res) => {
-    console.log('Callback reçu de MVola:', req.body);
-    res.status(200).json({ status: 'received' });
-});
-
-module.exports = router;
