@@ -101,7 +101,7 @@ router.post('/initiate', async (req, res) => {
             headers: {
                 'Version': '1.0',
                 'X-CorrelationID': `CORR_${Date.now()}`,
-                'UserLanguage': 'mg',
+                'UserLanguage': 'FR',
                 'UserAccountIdentifier': `msisdn;${process.env.PARTNER_MSISDN}`,
                 'partnerName': process.env.PARTNER_NAME,
                 'Content-Type': 'application/json',
