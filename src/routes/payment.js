@@ -34,7 +34,7 @@ router.get('/token', async (req, res) => {
         res.json({ 
             success: true, 
             message: 'Token obtenu avec succès',
-            token: token.substring(0, 20) + '...'
+            token: token.substring(0, 20) + '...' // Masquer le token complet
         });
     } catch (error) {
         res.status(500).json({ 
@@ -49,6 +49,7 @@ router.post('/initiate', async (req, res) => {
     try {
         const { amount, customerMsisdn, description } = req.body;
 
+        // Validation des données
         if (!amount || !customerMsisdn) {
             return res.status(400).json({
                 success: false,
@@ -56,8 +57,10 @@ router.post('/initiate', async (req, res) => {
             });
         }
 
+        // Obtenir le token d'authentification
         const accessToken = await getMVolaToken();
 
+        // Préparer les données de la transaction (format exact de la documentation)
         const transactionData = {
             amount: amount.toString(),
             currency: "Ar",
@@ -95,6 +98,7 @@ router.post('/initiate', async (req, res) => {
 
         console.log('Données envoyées à MVola:', JSON.stringify(transactionData, null, 2));
 
+        // Appel à l'API MVola
         const response = await axios.post(process.env.MVOLA_PAYMENT_URL, transactionData, {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
@@ -104,6 +108,7 @@ router.post('/initiate', async (req, res) => {
                 'UserAccountIdentifier': `msisdn;${process.env.PARTNER_MSISDN}`,
                 'partnerName': process.env.PARTNER_NAME,
                 'Content-Type': 'application/json',
+                'X-Callback-URL': 'https://mvola-payment-demo.onrender.com/callback',
                 'Cache-Control': 'no-cache'
             }
         });
