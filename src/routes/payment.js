@@ -60,12 +60,14 @@ router.post('/initiate', async (req, res) => {
         // Obtenir le token d'authentification
         const accessToken = await getMVolaToken();
 
-        // Préparer les données de la transaction
+        // Préparer les données de la transaction (format exact de la documentation)
         const transactionData = {
             amount: amount.toString(),
             currency: "Ar",
             descriptionText: description || "Paiement Demo MVola",
-            requestDate: new Date().toISOString(),
+            requestingOrganisationTransactionReference: "",
+            requestDate: "",
+            originalTransactionReference: "",
             debitParty: [
                 {
                     key: "msisdn",
@@ -91,10 +93,10 @@ router.post('/initiate', async (req, res) => {
                     key: "amountFc", 
                     value: "1"
                 }
-            ],
-            requestingOrganisationTransactionReference: `DEMO_${Date.now()}`,
-            originalTransactionReference: ""
+            ]
         };
+
+        console.log('Données envoyées à MVola:', JSON.stringify(transactionData, null, 2));
 
         // Appel à l'API MVola
         const response = await axios.post(process.env.MVOLA_PAYMENT_URL, transactionData, {
@@ -109,6 +111,8 @@ router.post('/initiate', async (req, res) => {
                 'Cache-Control': 'no-cache'
             }
         });
+
+        console.log('Réponse MVola:', response.data);
 
         res.json({
             success: true,
