@@ -96,7 +96,7 @@ router.post('/initiate', async (req, res) => {
 
         console.log('Données envoyées à MVola:', JSON.stringify(transactionData, null, 2));
 
-        // Headers exacts de la documentation
+        // Headers exacts de la documentation + X-Callback-URL
         const response = await axios.post(process.env.MVOLA_PAYMENT_URL, transactionData, {
             headers: {
                 'Version': '1.0',
@@ -106,6 +106,7 @@ router.post('/initiate', async (req, res) => {
                 'partnerName': process.env.PARTNER_NAME,
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${accessToken}`,
+                'X-Callback-URL': 'https://mvola-payment-demo.onrender.com/api/payment/callback',
                 'Cache-Control': 'no-cache'
             }
         });
@@ -161,6 +162,12 @@ router.get('/status/:serverCorrelationId', async (req, res) => {
             error: 'Erreur lors de la vérification du statut'
         });
     }
+});
+
+// Route callback pour MVola (optionnelle)
+router.put('/callback', (req, res) => {
+    console.log('Callback reçu de MVola:', req.body);
+    res.status(200).json({ status: 'received' });
 });
 
 module.exports = router;
