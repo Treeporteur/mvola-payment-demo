@@ -51,7 +51,7 @@ router.get('/token', async (req, res) => {
     }
 });
 
-// Route pour initier un paiement - REPRODUCTION EXACTE DU CURL DE LA DOCUMENTATION
+// Route pour initier un paiement - AVEC X-Callback-URL OBLIGATOIRE
 router.post('/initiate', async (req, res) => {
     try {
         const { amount, customerMsisdn, description } = req.body;
@@ -75,7 +75,7 @@ router.post('/initiate', async (req, res) => {
         const accessToken = await getMVolaToken();
         const correlationId = `${Date.now()}`;
 
-        // DONNÉES EXACTEMENT comme dans l'exemple CURL - MÊME ORDRE !
+        // DONNÉES EXACTEMENT comme dans l'exemple CURL
         const transactionData = {
             "amount": amount.toString(),
             "currency": "Ar",
@@ -92,13 +92,13 @@ router.post('/initiate', async (req, res) => {
             "creditParty": [
                 {
                     "key": "msisdn",
-                    "value": "0343500003" // HARDCODED comme dans la doc de test
+                    "value": "0343500003"
                 }
             ],
             "metadata": [
                 {
                     "key": "partnerName",
-                    "value": "Demo Store" // HARDCODED pour les tests
+                    "value": "Demo Store"
                 },
                 {
                     "key": "fc", 
@@ -111,33 +111,28 @@ router.post('/initiate', async (req, res) => {
             ]
         };
 
-        console.log('=== REQUÊTE MVOLA EXACTE ===');
-        console.log('URL avec slash final:', `${process.env.MVOLA_PAYMENT_URL}/`);
+        console.log('=== REQUÊTE MVOLA AVEC CALLBACK ===');
+        console.log('URL:', `${process.env.MVOLA_PAYMENT_URL}/`);
         console.log('Correlation ID:', correlationId);
-        console.log('Customer MSISDN:', customerMsisdn);
-        console.log('Credit Party (Marchand):', "0343500003");
-        console.log('Amount:', amount);
-        console.log('Transaction Data EXACTE:', JSON.stringify(transactionData, null, 2));
+        console.log('Transaction Data:', JSON.stringify(transactionData, null, 2));
 
-        // URL AVEC SLASH FINAL comme dans la documentation !
-        const url = `${process.env.MVOLA_PAYMENT_URL}/`;
-
-        // HEADERS dans l'ordre EXACT de l'exemple CURL !
+        // Headers AVEC X-Callback-URL obligatoire selon doc page 3 !
         const headers = {
             'Version': '1.0',
             'X-CorrelationID': correlationId,
             'UserLanguage': 'mg',
-            'UserAccountIdentifier': 'msisdn;0343500003', // HARDCODED pour test
-            'partnerName': 'Demo Store', // HARDCODED pour test
+            'UserAccountIdentifier': 'msisdn;0343500003',
+            'partnerName': 'Demo Store',
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${accessToken}`,
+            'X-Callback-URL': 'https://mvola-payment-demo.onrender.com/api/payment/callback', // AJOUTÉ !
             'Cache-Control': 'no-cache'
         };
 
-        console.log('=== HEADERS EXACTS ===');
+        console.log('=== HEADERS AVEC CALLBACK ===');
         console.log(JSON.stringify(headers, null, 2));
 
-        const response = await axios.post(url, transactionData, {
+        const response = await axios.post(`${process.env.MVOLA_PAYMENT_URL}/`, transactionData, {
             headers: headers,
             timeout: 30000
         });
@@ -154,15 +149,11 @@ router.post('/initiate', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('=== ERREUR DÉTAILLÉE MVOLA ===');
-        console.error('URL utilisée:', `${process.env.MVOLA_PAYMENT_URL}/`);
+        console.error('=== ERREUR AVEC CALLBACK ===');
         console.error('Status:', error.response?.status);
-        console.error('Status Text:', error.response?.statusText);
         console.error('Request Headers:', JSON.stringify(error.config?.headers, null, 2));
         console.error('Request Data:', JSON.stringify(JSON.parse(error.config?.data || '{}'), null, 2));
-        console.error('Response Headers:', error.response?.headers);
         console.error('Response Data:', JSON.stringify(error.response?.data, null, 2));
-        console.error('Error Message:', error.message);
         
         res.status(error.response?.status || 500).json({
             success: false,
@@ -170,7 +161,7 @@ router.post('/initiate', async (req, res) => {
             details: error.response?.data || error.message,
             httpStatus: error.response?.status || 500,
             requestUrl: `${process.env.MVOLA_PAYMENT_URL}/`,
-            correlationId: `${Date.now()}`
+            correlationId: correlationId
         });
     }
 });
@@ -182,30 +173,22 @@ router.get('/status/:serverCorrelationId', async (req, res) => {
         const accessToken = await getMVolaToken();
         const correlationId = `STATUS_${Date.now()}`;
 
-        console.log('=== VÉRIFICATION STATUT ===');
-        console.log('Server Correlation ID:', serverCorrelationId);
-
-        // URL avec slash final pour status aussi
-        const url = `${process.env.MVOLA_PAYMENT_URL}/status/${serverCorrelationId}`;
-        console.log('Status URL:', url);
-
-        const response = await axios.get(url, {
-            headers: {
-                'Version': '1.0',
-                'X-CorrelationID': correlationId,
-                'UserLanguage': 'mg',
-                'UserAccountIdentifier': 'msisdn;0343500003',
-                'partnerName': 'Demo Store',
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-                'Cache-Control': 'no-cache'
-            },
-            timeout: 30000
-        });
-
-        console.log('=== STATUT RÉCUPÉRÉ ===');
-        console.log('Status:', response.status);
-        console.log('Data:', JSON.stringify(response.data, null, 2));
+        const response = await axios.get(
+            `${process.env.MVOLA_PAYMENT_URL}/status/${serverCorrelationId}`,
+            {
+                headers: {
+                    'Version': '1.0',
+                    'X-CorrelationID': correlationId,
+                    'UserLanguage': 'mg',
+                    'UserAccountIdentifier': 'msisdn;0343500003',
+                    'partnerName': 'Demo Store',
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Cache-Control': 'no-cache'
+                },
+                timeout: 30000
+            }
+        );
 
         res.json({
             success: true,
@@ -215,7 +198,6 @@ router.get('/status/:serverCorrelationId', async (req, res) => {
 
     } catch (error) {
         console.error('=== ERREUR STATUT ===');
-        console.error('Status:', error.response?.status);
         console.error('Response:', JSON.stringify(error.response?.data, null, 2));
         
         res.status(error.response?.status || 500).json({
@@ -226,15 +208,20 @@ router.get('/status/:serverCorrelationId', async (req, res) => {
     }
 });
 
-// Route callback pour MVola
+// Route callback pour MVola - IMPORTANTE maintenant !
 router.put('/callback', (req, res) => {
     console.log('=== CALLBACK MVOLA REÇU ===');
+    console.log('Method:', req.method);
     console.log('Headers:', req.headers);
     console.log('Body:', JSON.stringify(req.body, null, 2));
+    console.log('Query:', req.query);
+    console.log('Timestamp:', new Date().toISOString());
     
+    // Répondre positivement à MVola
     res.status(200).json({ 
         status: 'received',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        message: 'Callback traité avec succès'
     });
 });
 
@@ -246,6 +233,7 @@ router.get('/config', (req, res) => {
             authUrl: process.env.MVOLA_AUTH_URL,
             paymentUrl: process.env.MVOLA_PAYMENT_URL,
             paymentUrlWithSlash: `${process.env.MVOLA_PAYMENT_URL}/`,
+            callbackUrl: 'https://mvola-payment-demo.onrender.com/api/payment/callback',
             partnerName: process.env.PARTNER_NAME,
             partnerMsisdn: process.env.PARTNER_MSISDN,
             consumerKeyPresent: !!process.env.MVOLA_CONSUMER_KEY,
@@ -255,16 +243,15 @@ router.get('/config', (req, res) => {
     });
 });
 
-// Route de test direct avec l'API MVola pour debug
+// Route de test debug AVEC X-Callback-URL
 router.post('/debug-direct', async (req, res) => {
     try {
         const accessToken = await getMVolaToken();
         
-        // Test avec les données exactes de la documentation
         const testData = {
             "amount": "1000",
             "currency": "Ar",
-            "descriptionText": "Test debug direct",
+            "descriptionText": "Test debug avec callback",
             "requestingOrganisationTransactionReference": "",
             "requestDate": "",
             "originalTransactionReference": "",
@@ -277,7 +264,7 @@ router.post('/debug-direct', async (req, res) => {
             ]
         };
 
-        console.log('=== TEST DEBUG DIRECT ===');
+        console.log('=== TEST DEBUG AVEC CALLBACK ===');
         console.log('Data:', JSON.stringify(testData, null, 2));
 
         const response = await axios.post(`${process.env.MVOLA_PAYMENT_URL}/`, testData, {
@@ -289,6 +276,7 @@ router.post('/debug-direct', async (req, res) => {
                 'partnerName': 'Demo Store',
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${accessToken}`,
+                'X-Callback-URL': 'https://mvola-payment-demo.onrender.com/api/payment/callback', // AJOUTÉ !
                 'Cache-Control': 'no-cache'
             }
         });
@@ -296,16 +284,16 @@ router.post('/debug-direct', async (req, res) => {
         res.json({
             success: true,
             data: response.data,
-            message: 'Test debug réussi !'
+            message: 'Test debug avec callback réussi !'
         });
 
     } catch (error) {
-        console.error('=== ERREUR TEST DEBUG ===');
+        console.error('=== ERREUR TEST DEBUG CALLBACK ===');
         console.error('Response:', JSON.stringify(error.response?.data, null, 2));
         
         res.status(error.response?.status || 500).json({
             success: false,
-            error: 'Erreur test debug',
+            error: 'Erreur test debug callback',
             details: error.response?.data || error.message
         });
     }
