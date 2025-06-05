@@ -65,8 +65,8 @@ router.post('/initiate', async (req, res) => {
             amount: amount.toString(),
             currency: "Ar",
             descriptionText: description || "Paiement Demo MVola",
-            requestingOrganisationTransactionReference: "",
-            requestDate: "",
+            requestingOrganisationTransactionReference: `DEMO_${Date.now()}`,
+            requestDate: new Date().toISOString(),
             originalTransactionReference: "",
             debitParty: [
                 {
