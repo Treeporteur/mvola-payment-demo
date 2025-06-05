@@ -53,7 +53,7 @@ router.get('/token', async (req, res) => {
     }
 });
 
-// Route pour initier un paiement
+// Route pour initier un paiement - FORMAT EXACT DE LA DOCUMENTATION
 router.post('/initiate', async (req, res) => {
     try {
         const { amount, customerMsisdn, description } = req.body;
@@ -77,16 +77,14 @@ router.post('/initiate', async (req, res) => {
 
         const accessToken = await getMVolaToken();
         const correlationId = `${Date.now()}`;
-        const transactionRef = `DEMO_${Date.now()}`;
-        const requestDate = new Date().toISOString();
 
-        // Format EXACT de la documentation CURL - même ordre !
+        // FORMAT EXACT de l'exemple CURL de la documentation - CHAMPS VIDES COMME DANS LA DOC !
         const transactionData = {
             "amount": amount.toString(),
             "currency": "Ar",
             "descriptionText": description || "Paiement Demo MVola",
-            "requestingOrganisationTransactionReference": transactionRef,
-            "requestDate": requestDate,
+            "requestingOrganisationTransactionReference": "", // VIDE comme dans la doc !
+            "requestDate": "", // VIDE comme dans la doc !
             "originalTransactionReference": "",
             "debitParty": [
                 {
@@ -121,43 +119,34 @@ router.post('/initiate', async (req, res) => {
         console.log('Partner MSISDN:', process.env.PARTNER_MSISDN);
         console.log('Partner Name:', process.env.PARTNER_NAME);
         console.log('Correlation ID:', correlationId);
-        console.log('Transaction Ref:', transactionRef);
-        console.log('Request Date:', requestDate);
         console.log('Customer MSISDN:', customerMsisdn);
         console.log('Amount:', amount);
         console.log('Transaction Data:', JSON.stringify(transactionData, null, 2));
 
-        // Headers EXACTS de la documentation - même ordre et même casse !
-        const headers = {
-            'Version': '1.0',
-            'X-CorrelationID': correlationId,
-            'UserLanguage': 'mg',  // IMPORTANT: 'mg' dans la doc !
-            'UserAccountIdentifier': `msisdn;${process.env.PARTNER_MSISDN || "0343500003"}`,
-            'partnerName': process.env.PARTNER_NAME || "Demo Store",
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-            'Cache-Control': 'no-cache'
-        };
-
-        console.log('=== HEADERS ENVOYÉS ===');
-        console.log(JSON.stringify(headers, null, 2));
-
+        // Headers EXACTEMENT comme dans l'exemple CURL - MÊME ORDRE !
         const response = await axios.post(process.env.MVOLA_PAYMENT_URL, transactionData, {
-            headers: headers,
-            timeout: 30000 // 30 secondes de timeout
+            headers: {
+                'Version': '1.0',
+                'X-CorrelationID': correlationId,
+                'UserLanguage': 'mg',
+                'UserAccountIdentifier': `msisdn;${process.env.PARTNER_MSISDN || "0343500003"}`,
+                'partnerName': process.env.PARTNER_NAME || "Demo Store",
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+                'Cache-Control': 'no-cache'
+            },
+            timeout: 30000
         });
 
         console.log('=== SUCCÈS MVOLA ===');
         console.log('Status:', response.status);
-        console.log('Response Headers:', response.headers);
         console.log('Response Data:', JSON.stringify(response.data, null, 2));
 
         res.json({
             success: true,
             data: response.data,
             message: 'Transaction initiée avec succès',
-            correlationId: correlationId,
-            transactionRef: transactionRef
+            correlationId: correlationId
         });
 
     } catch (error) {
@@ -166,10 +155,8 @@ router.post('/initiate', async (req, res) => {
         console.error('Status:', error.response?.status);
         console.error('Status Text:', error.response?.statusText);
         console.error('Request URL:', error.config?.url);
-        console.error('Request Method:', error.config?.method);
         console.error('Request Headers:', JSON.stringify(error.config?.headers, null, 2));
         console.error('Request Data:', error.config?.data);
-        console.error('Response Headers:', error.response?.headers);
         console.error('Response Data:', JSON.stringify(error.response?.data, null, 2));
         console.error('Message:', error.message);
         
@@ -177,8 +164,7 @@ router.post('/initiate', async (req, res) => {
             success: false,
             error: 'Erreur lors de l\'initiation du paiement',
             details: error.response?.data || error.message,
-            httpStatus: error.response?.status || 500,
-            errorType: error.constructor.name
+            httpStatus: error.response?.status || 500
         });
     }
 });
@@ -206,12 +192,13 @@ router.get('/status/:serverCorrelationId', async (req, res) => {
             `${process.env.MVOLA_PAYMENT_URL}/status/${serverCorrelationId}`,
             {
                 headers: {
-                    'Authorization': `Bearer ${accessToken}`,
                     'Version': '1.0',
                     'X-CorrelationID': correlationId,
                     'UserLanguage': 'mg',
                     'UserAccountIdentifier': `msisdn;${process.env.PARTNER_MSISDN || "0343500003"}`,
                     'partnerName': process.env.PARTNER_NAME || "Demo Store",
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
                     'Cache-Control': 'no-cache'
                 },
                 timeout: 30000
@@ -257,29 +244,22 @@ router.get('/details/:transactionId', async (req, res) => {
         const accessToken = await getMVolaToken();
         const correlationId = `DETAILS_${Date.now()}`;
 
-        console.log('=== RÉCUPÉRATION DÉTAILS ===');
-        console.log('Transaction ID:', transactionId);
-        console.log('URL:', `${process.env.MVOLA_PAYMENT_URL}/${transactionId}`);
-
         const response = await axios.get(
             `${process.env.MVOLA_PAYMENT_URL}/${transactionId}`,
             {
                 headers: {
-                    'Authorization': `Bearer ${accessToken}`,
                     'Version': '1.0',
                     'X-CorrelationID': correlationId,
                     'UserLanguage': 'mg',
                     'UserAccountIdentifier': `msisdn;${process.env.PARTNER_MSISDN || "0343500003"}`,
                     'partnerName': process.env.PARTNER_NAME || "Demo Store",
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
                     'Cache-Control': 'no-cache'
                 },
                 timeout: 30000
             }
         );
-
-        console.log('=== DÉTAILS RÉCUPÉRÉS ===');
-        console.log('Status:', response.status);
-        console.log('Data:', JSON.stringify(response.data, null, 2));
 
         res.json({
             success: true,
@@ -291,7 +271,6 @@ router.get('/details/:transactionId', async (req, res) => {
         console.error('=== ERREUR RÉCUPÉRATION DÉTAILS ===');
         console.error('Status:', error.response?.status);
         console.error('Response:', JSON.stringify(error.response?.data, null, 2));
-        console.error('Message:', error.message);
         
         res.status(error.response?.status || 500).json({
             success: false,
@@ -301,17 +280,15 @@ router.get('/details/:transactionId', async (req, res) => {
     }
 });
 
-// Route callback pour MVola (optionnelle)
+// Route callback pour MVola
 router.put('/callback', (req, res) => {
     console.log('=== CALLBACK MVOLA REÇU ===');
     console.log('Headers:', req.headers);
     console.log('Body:', JSON.stringify(req.body, null, 2));
-    console.log('Timestamp:', new Date().toISOString());
     
     res.status(200).json({ 
         status: 'received',
-        timestamp: new Date().toISOString(),
-        message: 'Callback traité avec succès'
+        timestamp: new Date().toISOString()
     });
 });
 
