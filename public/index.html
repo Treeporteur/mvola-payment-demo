@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo Paiement MVola</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #ffdd00, #006935);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #006935;
+            font-size: 2.5em;
+            margin: 0;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #333;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .btn {
+            background: #ffdd00;
+            color: #333;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            margin: 10px 0;
+        }
+        .btn:hover {
+            background: #e6c700;
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+        }
+        .result.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .result.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .test-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💰 Demo Paiement MVola</h1>
+            <p>Simulation d'intégration API MVola Sandbox</p>
+        </div>
+        
+        <div class="test-info">
+            <h3>📱 Numéros de test :</h3>
+            <p><strong>Client :</strong> 0343500003 ou 0343500004</p>
+            <p><strong>Marchand :</strong> 0343500003</p>
+        </div>
+
+        <div>
+            <h2>🔐 Test de connexion</h2>
+            <button class="btn" id="testTokenBtn">Tester la connexion API</button>
+        </div>
+
+        <div>
+            <h2>💳 Simuler un paiement</h2>
+            <form id="paymentForm">
+                <div class="form-group">
+                    <label for="amount">Montant (Ar) :</label>
+                    <input type="number" id="amount" value="1000" min="100" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="customerMsisdn">Numéro client :</label>
+                    <input type="text" id="customerMsisdn" value="0343500004" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">Description :</label>
+                    <textarea id="description" rows="3">Paiement test MVola Demo</textarea>
+                </div>
+                
+                <button type="submit" class="btn" id="payBtn">💰 Payer avec MVola</button>
+            </form>
+        </div>
+
+        <div id="result" class="result"></div>
+
+        <div id="statusSection" style="display: none;">
+            <h3>🔍 Vérification du statut</h3>
+            <p>Allez sur <a href="https://devapi.mvola.mg" target="_blank">Developer Portal MVola</a> pour approuver.</p>
+            <button class="btn" id="checkStatusBtn">🔄 Vérifier le statut</button>
+            <div id="statusResult" style="margin-top: 15px;"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentServerCorrelationId = null;
+
+        // Test de connexion
+        document.getElementById('testTokenBtn').addEventListener('click', async function() {
+            const btn = this;
+            btn.disabled = true;
+            btn.textContent = 'Test en cours...';
+            
+            try {
+                const response = await fetch('/api/payment/token');
+                const data = await response.json();
+                
+                showResult(data.success ? 'success' : 'error', 
+                    data.success ? '✅ Connexion API réussie !' : `❌ Erreur: ${data.error}`);
+            } catch (error) {
+                showResult('error', `❌ Erreur: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Tester la connexion API';
+            }
+        });
+
+        // Soumission du formulaire
+        document.getElementById('paymentForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const btn = document.getElementById('payBtn');
+            btn.disabled = true;
+            btn.textContent = 'Traitement...';
+            
+            const data = {
+                amount: document.getElementById('amount').value,
+                customerMsisdn: document.getElementById('customerMsisdn').value,
+                description: document.getElementById('description').value
+            };
+            
+            try {
+                const response = await fetch('/api/payment/initiate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentServerCorrelationId = result.data.serverCorrelationId;
+                    showResult('success', `✅ Transaction initiée !<br>
+                        <strong>ID:</strong> ${result.data.serverCorrelationId}<br>
+                        <strong>Statut:</strong> ${result.data.status}`);
+                    
+                    document.getElementById('statusSection').style.display = 'block';
+                } else {
+                    showResult('error', `❌ Erreur: ${result.error}`);
+                }
+            } catch (error) {
+                showResult('error', `❌ Erreur: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '💰 Payer avec MVola';
+            }
+        });
+
+        // Vérification du statut
+        document.getElementById('checkStatusBtn').addEventListener('click', async function() {
+            if (!currentServerCorrelationId) {
+                alert('Aucune transaction en cours');
+                return;
+            }
+            
+            const btn = this;
+            btn.disabled = true;
+            btn.textContent = 'Vérification...';
+            
+            try {
+                const response = await fetch(`/api/payment/status/${currentServerCorrelationId}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    const status = result.data.status;
+                    let statusText = '';
+                    
+                    switch(status) {
+                        case 'pending': statusText = '⏳ En attente'; break;
+                        case 'completed': statusText = '✅ Complétée !'; break;
+                        case 'failed': statusText = '❌ Échouée'; break;
+                        default: statusText = `ℹ️ ${status}`;
+                    }
+                    
+                    document.getElementById('statusResult').innerHTML = 
+                        `<div style="padding: 15px; background: #e7f3ff; border-radius: 5px;">${statusText}</div>`;
+                } else {
+                    document.getElementById('statusResult').innerHTML = 
+                        `<div style="padding: 15px; background: #f8d7da; border-radius: 5px;">❌ ${result.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('statusResult').innerHTML = 
+                    `<div style="padding: 15px; background: #f8d7da; border-radius: 5px;">❌ ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔄 Vérifier le statut';
+            }
+        });
+
+        function showResult(type, message) {
+            const result = document.getElementById('result');
+            result.className = `result ${type}`;
+            result.innerHTML = message;
+            result.style.display = 'block';
+            result.scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
